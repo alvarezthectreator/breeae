@@ -1,0 +1,10 @@
+/*
+!/index.html
+!/README.md
+!/.gitignore
+!/www.revolut.com/
+!/assets.revolut.com/
+!/www.revolut.com/**
+!/assets.revolut.com/**
+/www.revolut.com/api/
+/www.revolut.com/scripts/
