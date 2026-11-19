@@ -33,17 +33,88 @@
             }
         ];
 
-        const updateSafeSpaceImage = () => {
-            const section = document.querySelector('section[data-blockid="d7935e2a-c366-4f3c-b85a-889d6967ad40"]');
-            const video = section && section.querySelector('video');
-            if (!video) return;
+        const replaceRemainingVideos = () => {
+            const sectionImages = {
+                'e7a957ad-b891-4afa-bafe-6cb1eea2ec02': '/go-virtual-01.png_ac1095e7_2K.jpg',
+                '62bd35ab-ee15-478c-9d1c-b1b5f8679c4e': '/video-screenshots/ask-air.png',
+                'd7935e2a-c366-4f3c-b85a-889d6967ad40': '/video-screenshots/safe-space.png',
+                'f85a3566-de16-46d6-8408-83754f1f5a94': '/stocks-etfs.png_8fca010d_2K.jpg'
+            };
 
-            const image = document.createElement('img');
-            image.className = video.className;
-            image.src = 'https://assets.revolut.com/published-assets-v3/a6226f40-9bf8-4302-9e58-0f00968ef739/f45f28ff-2ebb-4ea0-b759-61290ae77dcd.webp';
-            image.alt = 'Revolut security call protection displayed on a smartphone';
-            image.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block';
-            video.replaceWith(image);
+            document.querySelectorAll('video').forEach((video) => {
+                const section = video.closest('section[data-blockid]');
+                const image = document.createElement('img');
+                image.className = video.className;
+                image.src = sectionImages[section && section.dataset.blockid] || '/go-virtual-01.png_ac1095e7_2K.jpg';
+                image.alt = '';
+                image.setAttribute('aria-hidden', 'true');
+                image.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block';
+                video.replaceWith(image);
+            });
+        };
+
+        const updateWebsiteName = () => {
+            const replaceBrandText = (value) => value.replace(/Revolut/gi, 'Revoulter');
+            document.title = 'Revoulter | Modern banking, made simple';
+            document.querySelectorAll('meta[property="og:site_name"], meta[property="og:image:alt"]').forEach((meta) => {
+                meta.content = 'Revoulter';
+            });
+            document.querySelectorAll('header a[href="/"] svg, footer svg').forEach((logo) => {
+                if (logo.dataset.brandCustom === 'true') return;
+                const logoTitle = logo.querySelector('title');
+                if (!logoTitle && !logo.closest('header')) return;
+                logo.dataset.brandCustom = 'true';
+                logo.setAttribute('viewBox', '0 0 190 32');
+                logo.innerHTML = '<title>Revoulter</title><text x="0" y="25" fill="currentColor" font-family="Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="-.5">Revoulter</text>';
+                const link = logo.closest('a');
+                if (link) link.setAttribute('title', 'Revoulter');
+            });
+            document.querySelectorAll('body [title], body [aria-label], body [alt]').forEach((element) => {
+                ['title', 'aria-label', 'alt'].forEach((attribute) => {
+                    const value = element.getAttribute(attribute);
+                    if (value) element.setAttribute(attribute, replaceBrandText(value));
+                });
+            });
+
+            const textNodes = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            let textNode;
+            while ((textNode = textNodes.nextNode())) {
+                if (textNode.parentElement.closest('script, style, textarea')) continue;
+                textNode.nodeValue = replaceBrandText(textNode.nodeValue);
+            }
+        };
+
+        const styleFooterLinks = () => {
+            const footerLinks = document.querySelector('footer .xz40b0');
+            if (!footerLinks || footerLinks.classList.contains('footer-links-grid')) return;
+            footerLinks.classList.add('footer-links-grid');
+            footerLinks.querySelectorAll('.dzMeWP').forEach((groupRow) => groupRow.classList.add('footer-links-grid__row'));
+            footerLinks.querySelectorAll('.hMeQNn').forEach((group) => group.classList.add('footer-links-grid__group'));
+        };
+
+        const setupAwardsMarquee = () => {
+            const awardsSection = document.querySelector('section[data-blockid="7de98943-92c4-4e70-9e2b-6944c4773cb7"]');
+            const extraAwardsSection = document.querySelector('section[data-blockid="555d9fc5-8b62-4cf0-b16a-0f4ad21cfa42"]');
+            const awardsList = awardsSection && awardsSection.querySelector('ul');
+            const extraAwardsList = extraAwardsSection && extraAwardsSection.querySelector('ul');
+            if (!awardsList || awardsList.closest('.awards-marquee__viewport')) return;
+
+            if (extraAwardsList) {
+                Array.from(extraAwardsList.children).forEach((item) => awardsList.appendChild(item));
+                extraAwardsSection.remove();
+            }
+
+            const viewport = document.createElement('div');
+            viewport.className = 'awards-marquee__viewport';
+            const track = document.createElement('div');
+            track.className = 'awards-marquee__track';
+            const duplicateList = awardsList.cloneNode(true);
+            duplicateList.setAttribute('aria-hidden', 'true');
+            awardsList.classList.add('awards-marquee__list');
+            duplicateList.classList.add('awards-marquee__list');
+            awardsList.parentNode.insertBefore(viewport, awardsList);
+            viewport.appendChild(track);
+            track.append(awardsList, duplicateList);
         };
 
         const renderSavingsCarousel = () => {
@@ -58,6 +129,8 @@
 
             section.dataset.savingsCarouselReady = 'true';
             section.classList.add('savings-showcase');
+            let activeIndex = 0;
+            let transitionTimer;
             const renderSlide = (activeIndex = 0) => {
                 const slide = moneySlides[activeIndex];
                 section.innerHTML = `
@@ -78,19 +151,40 @@
                     </div>`;
 
                 section.querySelectorAll('.savings-showcase__tab').forEach((tab) => {
-                    tab.addEventListener('click', () => renderSlide(Number(tab.dataset.slide)));
+                    tab.addEventListener('click', () => showSlide(Number(tab.dataset.slide)));
                 });
+            };
+
+            const showSlide = (nextIndex) => {
+                if (nextIndex === activeIndex) return;
+                window.clearTimeout(transitionTimer);
+                const card = section.querySelector('.savings-showcase__card');
+                card.classList.add('is-leaving');
+                transitionTimer = window.setTimeout(() => {
+                    activeIndex = nextIndex;
+                    renderSlide(activeIndex);
+                    const nextCard = section.querySelector('.savings-showcase__card');
+                    nextCard.classList.add('is-entering');
+                    nextCard.addEventListener('animationend', () => nextCard.classList.remove('is-entering'), { once: true });
+                }, 420);
             };
 
             renderSlide();
         };
 
+        window.setTimeout(updateWebsiteName, 100);
+        window.setTimeout(updateWebsiteName, 1000);
         document.addEventListener('DOMContentLoaded', () => {
+            updateWebsiteName();
+            styleFooterLinks();
+            setupAwardsMarquee();
             renderSavingsCarousel();
-            updateSafeSpaceImage();
+            replaceRemainingVideos();
             new MutationObserver(() => {
+                updateWebsiteName();
                 renderSavingsCarousel();
-                updateSafeSpaceImage();
+                setupAwardsMarquee();
+                replaceRemainingVideos();
             }).observe(document.documentElement, {
                 childList: true,
                 subtree: true
@@ -98,28 +192,26 @@
         });
     </script>
     <style>
+        html,
+        body {
+            min-height: 100%;
+            overflow-x: hidden;
+            overflow-y: auto !important;
+        }
+
         section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] .k3clxj0 {
-            background:
-                radial-gradient(ellipse at 18% 24%, rgba(55, 171, 105, .56), transparent 36%),
-                radial-gradient(ellipse at 82% 72%, rgba(33, 132, 82, .62), transparent 42%),
-                linear-gradient(128deg, #073d30 0%, #0b6045 52%, #123d34 100%) !important;
-            background-size: 180% 180%, 180% 180%, 100% 100% !important;
-            animation: hero-green-drift 18s ease-in-out infinite alternate;
+            --website-hero-carousel-background: transparent;
+            background-image: url("https://assets.revolut.com/published-assets-v3/4bcf4f81-c0b1-4bde-82f5-0b4cd2ddd2ef/2f242895-e89a-44d3-9f8a-fb78b32d80c5.png") !important;
+            background-position: center bottom;
+            background-repeat: no-repeat;
+            background-size: cover;
         }
 
-        section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] .k3clxj0 > picture {
-            display: none !important;
-        }
-
-        @keyframes hero-green-drift {
-            from { background-position: 0% 20%, 100% 80%, center; }
-            to { background-position: 100% 80%, 0% 20%, center; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] .k3clxj0 {
-                animation: none;
-            }
+        section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] .k3clxj0 picture,
+        section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] .k3clxj0 img {
+            display: block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
         }
 
         .savings-showcase.savings-showcase {
@@ -146,6 +238,30 @@
             border-radius: 30px;
             isolation: isolate;
             background: #26302d;
+        }
+
+        .savings-showcase__card.is-leaving {
+            animation: savings-card-out .42s ease-in both;
+        }
+
+        .savings-showcase__card.is-entering {
+            animation: savings-card-in .48s cubic-bezier(.2, .75, .25, 1) both;
+        }
+
+        @keyframes savings-card-out {
+            to { opacity: 0; transform: translateX(-24px); }
+        }
+
+        @keyframes savings-card-in {
+            from { opacity: 0; transform: translateX(24px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .savings-showcase__card.is-leaving,
+            .savings-showcase__card.is-entering {
+                animation: none;
+            }
         }
 
         .savings-showcase__eyebrow {
@@ -250,6 +366,232 @@
             background: #171717;
         }
 
+        .footer-links-grid {
+            display: grid !important;
+            width: min(1200px, calc(100% - 48px));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 22px;
+            margin: 48px auto !important;
+        }
+
+        .footer-links-grid__row {
+            display: contents !important;
+        }
+
+        .footer-links-grid .caZqNd {
+            display: none !important;
+        }
+
+        .footer-links-grid__group {
+            display: flex !important;
+            min-width: 0;
+            flex-direction: column;
+            gap: 11px;
+            padding: 24px;
+            border: 1px solid rgba(255, 255, 255, .14);
+            border-radius: 20px;
+            background: rgba(255, 255, 255, .04);
+        }
+
+        .footer-links-grid__group h2 {
+            margin: 0 0 4px;
+            color: #fff;
+            font-size: 17px;
+            font-weight: 600;
+        }
+
+        .footer-links-grid__group a {
+            color: rgba(255, 255, 255, .7) !important;
+            font-size: 14px;
+            line-height: 1.4;
+            text-decoration: none;
+            transition: color .18s ease;
+        }
+
+        .footer-links-grid__group a:hover {
+            color: #fff !important;
+        }
+
+        @media (max-width: 760px) {
+            .footer-links-grid {
+                width: min(560px, calc(100% - 36px));
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 14px;
+                margin: 32px auto !important;
+            }
+
+            .footer-links-grid__group {
+                padding: 20px;
+                border-radius: 16px;
+            }
+        }
+
+        footer.e1hc720 {
+            width: 100%;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 72px clamp(24px, 4vw, 64px) 40px;
+            background:
+                linear-gradient(135deg, rgba(53, 171, 118, .09), transparent 38%),
+                #111417;
+            color: #f7f8f7;
+        }
+
+        footer.e1hc720 > .hXmZui {
+            width: min(1280px, 100%);
+            margin: 0 auto 24px;
+            color: #fff;
+            font-size: clamp(28px, 4vw, 48px);
+            line-height: 1;
+        }
+
+        footer.e1hc720 > section,
+        footer.e1hc720 > div,
+        footer.e1hc720 > ul {
+            width: min(1280px, 100%);
+            margin-left: auto !important;
+            margin-right: auto !important;
+        }
+
+        footer.e1hc720 > section.bNsCYE {
+            margin-bottom: 64px;
+        }
+
+        footer.e1hc720 section.bNsCYE ul.cABksr {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        footer.e1hc720 section.bNsCYE li.edniva5 {
+            min-width: 0;
+        }
+
+        footer.e1hc720 section.bNsCYE li.edniva5 > a {
+            min-height: 280px;
+            border: 1px solid rgba(255, 255, 255, .11);
+            border-radius: 8px;
+            background: #1a1e21;
+            transition: transform .2s ease, border-color .2s ease, background .2s ease;
+        }
+
+        footer.e1hc720 section.bNsCYE li.edniva5 > a:hover {
+            transform: translateY(-4px);
+            border-color: rgba(111, 211, 153, .55);
+            background: #202529;
+        }
+
+        footer.e1hc720 section.text-block {
+            box-sizing: border-box;
+            padding: 28px 0;
+            border-top: 1px solid rgba(255, 255, 255, .12);
+        }
+
+        footer.e1hc720 section.text-block + section.text-block {
+            margin-top: 0;
+        }
+
+        footer.e1hc720 section.text-block .hAhkur {
+            max-width: 100%;
+            color: rgba(255, 255, 255, .64);
+            font-size: 13px;
+            line-height: 1.65;
+        }
+
+        footer.e1hc720 section.text-block .hAhkur p {
+            margin: 0 0 12px;
+        }
+
+        footer.e1hc720 section.text-block .hAhkur p:last-child {
+            margin-bottom: 0;
+        }
+
+        footer.e1hc720 section.text-block a {
+            color: #a9e6c4 !important;
+            text-decoration: none;
+        }
+
+        footer.e1hc720 section.text-block a:hover {
+            color: #fff !important;
+            text-decoration: underline;
+        }
+
+        footer.e1hc720 .footer-links-grid {
+            width: 100%;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 1px;
+            margin: 48px auto 56px !important;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, .12);
+        }
+
+        .footer-links-grid__group {
+            min-height: 150px;
+            border: 0;
+            border-radius: 0;
+            background: #171b1e;
+        }
+
+        footer.e1hc720 > ul.eeWCFh {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-sizing: border-box;
+            padding-top: 28px;
+            border-top: 1px solid rgba(255, 255, 255, .12);
+        }
+
+        footer.e1hc720 > ul.eeWCFh > li:last-child {
+            display: flex;
+            gap: 8px;
+        }
+
+        @media (max-width: 480px) {
+            .footer-links-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
+        @media (max-width: 1040px) {
+            footer.e1hc720 section.bNsCYE ul.cABksr {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            footer.e1hc720 .footer-links-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 640px) {
+            footer.e1hc720 {
+                padding: 56px 18px 32px;
+            }
+
+            footer.e1hc720 section.bNsCYE ul.cABksr,
+            footer.e1hc720 .footer-links-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            footer.e1hc720 section.bNsCYE li.edniva5 > a {
+                min-height: 240px;
+            }
+
+            footer.e1hc720 > ul.eeWCFh {
+                align-items: flex-start;
+                gap: 24px;
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 420px) {
+            footer.e1hc720 section.bNsCYE ul.cABksr,
+            footer.e1hc720 .footer-links-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
         @media (max-width: 640px) {
             .savings-showcase.savings-showcase {
                 padding: 56px 18px;
@@ -273,33 +615,842 @@
         [role="dialog"] {
             display: none !important;
         }
-    </style>
+
+        section[data-blockid="7de98943-92c4-4e70-9e2b-6944c4773cb7"],
+        section[data-blockid="555d9fc5-8b62-4cf0-b16a-0f4ad21cfa42"] {
+            overflow: hidden;
+            padding-block: 28px !important;
+        }
+
+        section[data-blockid="7de98943-92c4-4e70-9e2b-6944c4773cb7"] h2 {
+            margin: 0 0 18px !important;
+            font-size: clamp(22px, 3vw, 34px) !important;
+            line-height: 1.12 !important;
+        }
+
+        .awards-marquee__viewport {
+            width: 100%;
+            overflow: hidden;
+            -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+            mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+        }
+
+        .awards-marquee__track {
+            display: flex;
+            width: max-content;
+            animation: awards-marquee-scroll 38s linear infinite;
+            will-change: transform;
+        }
+
+        .awards-marquee__viewport:hover .awards-marquee__track,
+        .awards-marquee__viewport:focus-within .awards-marquee__track {
+            animation-play-state: paused;
+        }
+
+        .awards-marquee__list {
+            display: flex !important;
+            width: max-content;
+            flex: 0 0 auto;
+            flex-wrap: nowrap !important;
+            align-items: center;
+            gap: clamp(18px, 3vw, 36px);
+            margin: 0 !important;
+            padding: 8px clamp(18px, 3vw, 36px) 8px 0 !important;
+        }
+
+        .awards-marquee__list > li {
+            width: clamp(100px, 12vw, 150px);
+            flex: 0 0 clamp(100px, 12vw, 150px);
+        }
+
+        .awards-marquee__list figure {
+            width: 100%;
+            gap: 8px !important;
+        }
+
+        .awards-marquee__list figure > div:first-child {
+            position: relative;
+            width: 100%;
+            height: 58px;
+            aspect-ratio: auto !important;
+        }
+
+        .awards-marquee__list figure > div:first-child > div:first-child {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .awards-marquee__list figure > div:first-child > div:last-child {
+            display: none;
+        }
+
+        .awards-marquee__list img {
+            width: 100%;
+            height: 58px;
+            object-fit: contain !important;
+        }
+
+        .awards-marquee__list figcaption {
+            min-height: 28px;
+            font-size: 11px !important;
+            line-height: 1.25 !important;
+            text-align: center;
+        }
+
+        @keyframes awards-marquee-scroll {
+            to { transform: translateX(-50%); }
+        }
+
+        @media (max-width: 640px) {
+            .awards-marquee__list > li {
+                width: 102px;
+                flex-basis: 102px;
+            }
+
+            .awards-marquee__list figure > div:first-child,
+            .awards-marquee__list img {
+                height: 44px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .awards-marquee__viewport {
+                overflow-x: auto;
+                -webkit-mask-image: none;
+                mask-image: none;
+            }
+
+            .awards-marquee__track {
+                animation: none;
+                transform: none;
+            }
+        }
+
+        footer.e1hc720 > h2#99b34fdc-80dd-4b0e-a9c9-baab8c6bf5cd {
+            width: min(1280px, 100%);
+            margin: 0 auto 28px;
+            color: #fff;
+            font-size: clamp(34px, 5vw, 54px);
+            line-height: 1.05;
+            letter-spacing: -.04em;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] {
+            width: min(1280px, 100%);
+            margin: 0 auto 64px;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul {
+            display: grid !important;
+            width: 100%;
+            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+            gap: 16px !important;
+            margin: 0;
+            padding: 0;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul > li {
+            min-width: 0;
+            grid-column: auto !important;
+            grid-row: auto !important;
+            padding: 0 !important;
+            background: transparent !important;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul > li > a {
+            display: flex;
+            width: 100%;
+            min-height: 282px;
+            box-sizing: border-box;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 22px;
+            padding: 24px 22px;
+            border: 1px solid rgba(255, 255, 255, .13);
+            border-radius: 22px;
+            background: linear-gradient(145deg, #20262a, #171b1f);
+            color: #fff;
+            text-decoration: none;
+            transition: transform .2s ease, border-color .2s ease, background .2s ease;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul > li > a:hover {
+            transform: translateY(-4px);
+            border-color: rgba(255, 255, 255, .38);
+            background: linear-gradient(145deg, #293137, #1b2024);
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul > li > a > span:first-child {
+            display: flex;
+            width: 100%;
+            flex: 1;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] h2 {
+            margin: 0;
+            color: rgba(255, 255, 255, .72);
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: .01em;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] h3 {
+            margin: 0;
+            color: #fff;
+            font-size: clamp(20px, 1.8vw, 25px);
+            font-weight: 600;
+            letter-spacing: -.035em;
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] p {
+            margin: 0;
+            color: rgba(255, 255, 255, .68);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul > li > a > div:last-child {
+            position: relative;
+            display: flex;
+            width: 38px;
+            height: 38px;
+            flex: 0 0 38px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: #fff;
+            color: #15191c;
+            transition: transform .2s ease;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul > li > a > div:last-child > span {
+            display: none;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul > li > a > div:last-child::after {
+            content: "→";
+            color: #15191c;
+            font-size: 22px;
+            line-height: 1;
+        }
+
+        footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul > li > a:hover > div:last-child {
+            transform: translateX(3px);
+        }
+
+        @media (max-width: 1080px) {
+            footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            }
+        }
+
+        @media (max-width: 680px) {
+            footer.e1hc720 > h2#99b34fdc-80dd-4b0e-a9c9-baab8c6bf5cd {
+                margin-bottom: 22px;
+            }
+
+            footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 12px !important;
+            }
+
+            footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul > li > a {
+                min-height: 270px;
+                gap: 18px;
+                padding: 20px 18px;
+                border-radius: 18px;
+            }
+        }
+
+        @media (max-width: 420px) {
+            footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+
+            footer.e1hc720 > section[data-blockid="45f4d4d8-fef6-46c7-b4b7-2fac5beaad69"] > ul > li > a {
+                min-height: 238px;
+            }
+        }
+    
+        section[data-blockid="d7935e2a-c366-4f3c-b85a-889d6967ad40"] img[src$="safe-space.png"] {
+            object-fit: cover !important;
+            object-position: center 44% !important;
+            transform: scale(1.12);
+        }
+
+        section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] {
+            display: grid !important;
+            grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr) !important;
+            align-items: center !important;
+            width: min(1280px, calc(100% - 48px)) !important;
+            min-height: 560px !important;
+            margin: 52px auto !important;
+            padding: clamp(28px, 5vw, 76px) !important;
+            overflow: hidden !important;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 32px !important;
+            background: radial-gradient(ellipse at 76% 48%, rgba(52, 64, 81, 0.48), transparent 42%), #050607 !important;
+            color: #fff !important;
+            box-sizing: border-box !important;
+        }
+
+        section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:first-child {
+            position: relative !important;
+            inset: auto !important;
+            grid-column: 2;
+            grid-row: 1;
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 430px !important;
+            align-self: stretch !important;
+        }
+
+        section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:first-child > div,
+        section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:first-child > div > div {
+            position: relative !important;
+            inset: auto !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 430px !important;
+        }
+
+        section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] img[src$="ask-air.png"] {
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain !important;
+            object-position: center 70% !important;
+            transform: scale(1.22) !important;
+            filter: drop-shadow(0 24px 54px rgba(0, 0, 0, 0.62));
+        }
+
+        section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:nth-child(2) {
+            position: relative !important;
+            inset: auto !important;
+            z-index: 1;
+            grid-column: 1;
+            grid-row: 1;
+            width: 100% !important;
+            max-width: 510px;
+            padding: 8px 12px 8px 0 !important;
+            box-sizing: border-box !important;
+        }
+
+        section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] h2 {
+            max-width: 510px;
+            margin: 0 0 22px !important;
+            color: #fff !important;
+            font-size: clamp(42px, 5.4vw, 76px) !important;
+            font-weight: 600 !important;
+            letter-spacing: -0.055em !important;
+            line-height: 0.99 !important;
+        }
+
+        section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] p {
+            max-width: 440px;
+            color: rgba(255, 255, 255, 0.75) !important;
+            font-size: clamp(16px, 1.35vw, 19px) !important;
+            line-height: 1.55 !important;
+        }
+
+        section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] a[href="/air-ai-by-revolut/"] {
+            margin-top: 12px;
+            border-radius: 999px !important;
+            background: #fff !important;
+            color: #111 !important;
+            font-weight: 600 !important;
+        }
+
+        @media (max-width: 760px) {
+            section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] {
+                grid-template-columns: minmax(0, 1fr) !important;
+                width: calc(100% - 32px) !important;
+                min-height: 0 !important;
+                margin: 32px auto !important;
+                padding: 32px 24px 12px !important;
+                border-radius: 24px !important;
+            }
+
+            section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:first-child {
+                grid-column: 1;
+                grid-row: 2;
+                min-height: 330px !important;
+                margin-top: 12px;
+            }
+
+            section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:first-child > div,
+            section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:first-child > div > div {
+                min-height: 330px !important;
+            }
+
+            section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:nth-child(2) {
+                grid-column: 1;
+                grid-row: 1;
+                max-width: none;
+                padding: 0 !important;
+            }
+
+            section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] h2 {
+                font-size: clamp(40px, 12vw, 58px) !important;
+            }
+        }
+
+        footer.e1hc720 .footer-links-grid {
+            display: grid !important;
+            width: min(1280px, 100%);
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            grid-auto-flow: row;
+            gap: 14px;
+            margin: 48px auto 56px !important;
+            padding: 0;
+            overflow: visible;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+        }
+
+        .footer-links-grid__row {
+            display: contents !important;
+        }
+
+        footer.e1hc720 .footer-links-grid__group {
+            display: flex !important;
+            min-width: 0;
+            min-height: 0;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0;
+            padding: 20px 20px 16px;
+            border: 1px solid rgba(255, 255, 255, .1);
+            border-radius: 18px;
+            background: linear-gradient(145deg, #1a2023, #151a1d);
+            transition: border-color .2s ease, transform .2s ease, background .2s ease;
+        }
+
+        footer.e1hc720 .footer-links-grid__group:hover {
+            transform: translateY(-2px);
+            border-color: rgba(142, 224, 177, .34);
+            background: linear-gradient(145deg, #20282a, #171d20);
+        }
+
+        footer.e1hc720 .footer-links-grid__group h2 {
+            margin: 0 0 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, .1);
+            color: #f2f7f4;
+            font-size: 12px;
+            font-weight: 650;
+            letter-spacing: .09em;
+            line-height: 1.35;
+            text-transform: uppercase;
+        }
+
+        footer.e1hc720 .footer-links-grid__group a {
+            display: block;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, .055);
+            color: rgba(239, 244, 241, .68) !important;
+            font-size: 13px;
+            line-height: 1.35;
+            text-decoration: none;
+            transition: color .16s ease, padding-left .16s ease;
+        }
+
+        footer.e1hc720 .footer-links-grid__group a:empty,
+        footer.e1hc720 .footer-links-grid__group a[title=""] {
+            display: none !important;
+        }
+
+        footer.e1hc720 .footer-links-grid__group a:last-child {
+            border-bottom: 0;
+        }
+
+        footer.e1hc720 .footer-links-grid__group a:hover {
+            padding-left: 4px;
+            color: #a9e6c4 !important;
+        }
+
+        @media (max-width: 1040px) {
+            footer.e1hc720 .footer-links-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            }
+        }
+
+        @media (max-width: 680px) {
+            footer.e1hc720 .footer-links-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 12px;
+            }
+
+            footer.e1hc720 .footer-links-grid__group {
+                padding: 17px 15px 13px;
+                border-radius: 15px;
+            }
+
+            footer.e1hc720 .footer-links-grid__group a {
+                font-size: 12px;
+            }
+        }
+
+        @media (max-width: 420px) {
+            footer.e1hc720 .footer-links-grid {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+        }
+
+        .simple-site-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: clamp(20px, 4vw, 64px);
+            width: 100%;
+            min-height: 84px;
+            padding: 0 clamp(20px, 5vw, 72px);
+            box-sizing: border-box;
+            color: #fff;
+            background: transparent;
+            border-bottom: 0;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+        }
+
+        .simple-site-header__brand {
+            flex: 0 0 auto;
+            color: #fff;
+            font: 700 25px/1 Aeonik Pro, Inter, sans-serif;
+            letter-spacing: -1.2px;
+            text-decoration: none;
+            text-shadow: 0 1px 12px rgba(0, 24, 52, 0.3);
+        }
+
+        .simple-site-header__links {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(16px, 2.25vw, 34px);
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .simple-site-header__links a,
+        .simple-site-header__login {
+            flex: 0 0 auto;
+            color: rgba(255, 255, 255, 0.96);
+            font: 500 14px/1.2 Aeonik Pro, Inter, sans-serif;
+            text-decoration: none;
+            text-shadow: 0 1px 12px rgba(0, 24, 52, 0.32);
+            transition: color 160ms ease;
+        }
+
+        .simple-site-header__links a:hover,
+        .simple-site-header__links a:focus-visible,
+        .simple-site-header__login:hover,
+        .simple-site-header__login:focus-visible {
+            color: #fff;
+        }
+
+        .simple-site-header__actions {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex: 0 0 auto;
+        }
+
+        .simple-site-header__signup {
+            display: inline-flex;
+            min-height: 42px;
+            align-items: center;
+            justify-content: center;
+            padding: 0 19px;
+            border-radius: 999px;
+            background: #10294a;
+            color: #fff;
+            box-shadow: 0 5px 16px rgba(10, 35, 67, 0.16);
+            font: 600 14px/1 Aeonik Pro, Inter, sans-serif;
+            text-decoration: none;
+            transition: transform 160ms ease, background 160ms ease;
+        }
+
+        .simple-site-header__signup:hover { background: #1b416c; transform: translateY(-1px); }
+        .simple-site-header a:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+
+        section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] section.leNKuJ {
+            padding-block-start: 64px !important;
+        }
+
+        @media (min-width: 840px) {
+            section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] section.leNKuJ {
+                padding-block-start: 78px !important;
+            }
+        }
+
+        @media (min-width: 1920px) {
+            section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] section.leNKuJ {
+                padding-block-start: 108px !important;
+            }
+        }
+
+        @media (max-width: 850px) {
+            .simple-site-header {
+                min-height: 74px;
+                gap: 24px;
+                padding: 0 20px;
+            }
+            .simple-site-header__links {
+                justify-content: flex-start;
+                gap: 22px;
+                overflow-x: auto;
+                scrollbar-width: none;
+                white-space: nowrap;
+            }
+            .simple-site-header__links::-webkit-scrollbar { display: none; }
+            .simple-site-header__actions { gap: 14px; }
+        }
+
+        @media (max-width: 560px) {
+            .simple-site-header { gap: 20px; padding: 0 16px; }
+            .simple-site-header__brand { font-size: 22px; }
+            .simple-site-header__links { gap: 18px; }
+            .simple-site-header__links a { font-size: 13px; }
+            .simple-site-header__login { display: none; }
+            .simple-site-header__signup { min-height: 38px; padding: 0 14px; font-size: 13px; }
+        }
+
+        /* Keep the header easy to use at tablet and phone widths without a menu drawer. */
+        @media (max-width: 900px) {
+            .simple-site-header {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-rows: auto auto;
+                gap: 12px 18px;
+                min-height: 0;
+                padding: 14px 20px 11px;
+            }
+
+            .simple-site-header__brand { grid-column: 1; grid-row: 1; }
+            .simple-site-header__actions { grid-column: 2; grid-row: 1; }
+            .simple-site-header__links {
+                grid-column: 1 / -1;
+                grid-row: 2;
+                width: 100%;
+                min-height: 30px;
+                margin: 0 -2px;
+                padding: 0 2px 2px;
+                box-sizing: border-box;
+                justify-content: flex-start;
+                gap: 24px;
+                overflow-x: auto;
+                overscroll-behavior-x: contain;
+                scrollbar-width: none;
+                white-space: nowrap;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .simple-site-header__links::-webkit-scrollbar { display: none; }
+
+            section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] .kYjNIg {
+                padding-block-start: 118px !important;
+            }
+        }
+
+        @media (max-width: 640px) {
+            html,
+            body,
+            #__next {
+                max-width: 100%;
+                overflow-x: clip !important;
+            }
+
+            img,
+            picture,
+            video,
+            canvas,
+            svg {
+                max-width: 100%;
+            }
+
+            main {
+                width: 100%;
+                overflow-x: clip;
+            }
+
+            main h1 {
+                max-width: 100%;
+                font-size: clamp(38px, 11vw, 58px) !important;
+                line-height: 0.99 !important;
+                letter-spacing: -0.045em !important;
+                overflow-wrap: anywhere;
+            }
+
+            main h2 {
+                max-width: 100%;
+                font-size: clamp(30px, 8vw, 44px) !important;
+                line-height: 1.04 !important;
+                letter-spacing: -0.04em !important;
+                overflow-wrap: anywhere;
+            }
+
+            main p {
+                overflow-wrap: anywhere;
+            }
+
+            main a,
+            footer a,
+            button {
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            main button,
+            main a[role="button"] {
+                min-height: 44px;
+            }
+
+            section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] {
+                min-height: max(680px, 100svh) !important;
+                height: max(680px, 100svh) !important;
+            }
+
+            section[data-blockid="7de98943-92c4-4e70-9e2b-6944c4773cb7"] {
+                padding: 44px 18px !important;
+            }
+
+            .awards-marquee__viewport {
+                width: calc(100% + 36px);
+                margin-inline: -18px;
+            }
+
+            .savings-showcase.savings-showcase {
+                padding: 44px 16px;
+            }
+
+            .savings-showcase__card {
+                min-height: min(590px, calc(100svh - 150px));
+                min-height: max(470px, min(590px, calc(100svh - 150px)));
+            }
+
+            .savings-showcase__content {
+                min-height: inherit;
+                padding: 24px 20px;
+            }
+
+            .savings-showcase__card h2 {
+                font-size: clamp(36px, 10vw, 50px);
+            }
+
+            .savings-showcase__description {
+                margin: 16px 0 22px;
+                font-size: 16px;
+            }
+
+            .savings-showcase__tabs {
+                justify-content: flex-start;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                padding: 2px 2px 8px;
+                scrollbar-width: none;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .savings-showcase__tabs::-webkit-scrollbar { display: none; }
+            .savings-showcase__tab { flex: 0 0 auto; min-height: 44px; padding-inline: 17px; }
+
+            section[data-blockid="e7a957ad-b891-4afa-bafe-6cb1eea2ec02"] {
+                min-height: max(640px, 92svh) !important;
+            }
+
+            section[data-blockid="e7a957ad-b891-4afa-bafe-6cb1eea2ec02"] > div:nth-child(3) {
+                padding: 34px 20px 30px !important;
+            }
+
+            footer.e1hc720 {
+                padding: 44px 16px 28px;
+            }
+
+            footer.e1hc720 > h2#99b34fdc-80dd-4b0e-a9c9-baab8c6bf5cd {
+                font-size: clamp(28px, 8vw, 38px) !important;
+                line-height: 1.05;
+            }
+
+            footer.e1hc720 .footer-links-grid {
+                width: 100%;
+                gap: 10px;
+                margin: 28px auto 36px !important;
+            }
+
+            footer.e1hc720 .footer-links-grid__group {
+                padding: 16px 14px 12px;
+            }
+
+            footer.e1hc720 section.bNsCYE ul.cABksr {
+                gap: 10px;
+            }
+
+            footer.e1hc720 section.bNsCYE li.edniva5 > a {
+                min-height: 220px;
+            }
+
+            footer.e1hc720 section.text-block {
+                padding: 22px 0;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .simple-site-header { padding-inline: 14px; gap: 10px 14px; }
+            .simple-site-header__links { gap: 20px; }
+            .simple-site-header__brand { font-size: 21px; }
+            .simple-site-header__signup { padding-inline: 12px; }
+            section[data-blockid="24b6c305-36ff-4886-aeee-8c47f38a1369"] .kYjNIg {
+                padding-block-start: 112px !important;
+            }
+            section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] {
+                width: calc(100% - 24px) !important;
+                padding: 28px 18px 8px !important;
+            }
+            section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:first-child,
+            section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:first-child > div,
+            section[data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e"] > div:first-child > div > div {
+                min-height: 280px !important;
+            }
+        }
+</style>
     <script type="application/ld+json" data-next-head="">
         {
             "@context": "https://schema.org",
             "@type": "Organization",
-            "name": "Revolut",
+            "name": "REVOULTER",
             "url": "https://www.revolut.com",
-            "description": "Revolut is a leading global fintech offering various products, from savings to credit, to millions of customers worldwide.",
+            "description": "REVOULTER is a leading global fintech offering various products, from savings to credit, to millions of customers worldwide.",
             "logo": "https://assets.revolut.com/website/images/revolut-logo.png",
             "sameAs": ["https://www.facebook.com/revolut", "https://www.instagram.com/revolut/", "https://x.com/Revolut", "https://www.linkedin.com/company/revolut", "https://www.tiktok.com/@revolut", "https://www.trustpilot.com/review/www.revolut.com", "https://www.youtube.com/@RevolutApp", "https://en.wikipedia.org/wiki/Revolut", "https://play.google.com/store/apps/details?id=com.revolut.revolut&amp;hl=en&amp;gl=US", "https://apps.apple.com/us/app/revolut-send-spend-and-save/id932493382"]
         }
     </script>
-    <title data-next-head="">Modern banking, made simple | Revolut United Kingdom</title>
-    <meta name="description" content="Join 80+ million customers globally using Revolut to send money to 160+ countries, hold up-to 36 currencies in app, spend in 150+ currencies, and manage their money."
+    <title data-next-head="">REVOULTER | Modern banking, made simple</title>
+    <meta name="description" content="Join 80+ million customers globally using REVOULTER to send money to 160+ countries, hold up-to 36 currencies in app, spend in 150+ currencies, and manage their money."
         data-next-head="" />
     <meta name="twitter:card" content="summary_large_image" data-next-head="" />
     <meta name="twitter:site" content="@RevolutApp" data-next-head="" />
-    <meta property="og:title" content="Banking &amp; Beyond | Revolut United Kingdom" data-next-head="" />
-    <meta property="og:description" content="Join 80+ million customers globally using Revolut to send money to 160+ countries, hold up-to 36 currencies in app, spend in 150+ currencies, and manage their money." data-next-head="" />
+    <meta property="og:title" content="Banking &amp; Beyond | REVOULTER United Kingdom" data-next-head="" />
+    <meta property="og:description" content="Join 80+ million customers globally using REVOULTER to send money to 160+ countries, hold up-to 36 currencies in app, spend in 150+ currencies, and manage their money." data-next-head="" />
     <meta property="og:url" content="https://www.revolut.com/" data-next-head="" />
     <meta property="og:type" content="website" data-next-head="" />
     <meta property="og:image" content="https://assets.revolut.com/website/images/img-og-retail.png" data-next-head="" />
-    <meta property="og:image:alt" content="Revolut" data-next-head="" />
+    <meta property="og:image:alt" content="REVOULTER" data-next-head="" />
     <meta property="og:image:width" content="1200" data-next-head="" />
     <meta property="og:image:height" content="630" data-next-head="" />
     <meta property="og:locale" content="en_GB" data-next-head="" />
-    <meta property="og:site_name" content="Revolut" data-next-head="" />
+    <meta property="og:site_name" content="REVOULTER" data-next-head="" />
     <link rel="canonical" href="https://www.revolut.com/" data-next-head="" />
     <meta name="msapplication-TileColor" content="#191C1F" data-next-head="" />
     <meta name="viewport" content="initial-scale=1.0, width=device-width" data-next-head="" />
@@ -325,109 +1476,146 @@
         fetchpriority="high" data-next-head="" />
     <link rel="preload" as="image" imageSrcSet="https://assets.revolut.com/published-assets-v3/c1d9d317-7303-4f79-8756-937632237bb5/2442a1d3-8d03-44b9-a046-db33242f100a.png 1080w, https://assets.revolut.com/published-assets-v3/c1d9d317-7303-4f79-8756-937632237bb5/0eb1515a-91e8-4d4e-8e19-ff7c82de5410.png 2048w, https://assets.revolut.com/published-assets-v3/c1d9d317-7303-4f79-8756-937632237bb5/344c3cc7-0d4d-4749-8f12-b677d289a4a5.png 3840w"
         fetchpriority="high" data-next-head="" />
-    <script defer="" id="sanitize-tracking-params" src="https://www.revolut.com/scripts/sanitize-tracking-params.js"></script>
-    <script defer="" id="_next-ga-init" src="https://www.revolut.com/scripts/_next-ga-init.js"></script>
-    <script defer="" src="https://polyfills.revolut.com/v3/polyfill.min.js?features=Array.prototype.at%2CPromise.allSettled%2CIntl.getCanonicalLocales%2CIntl.Locale%2CIntl.PluralRules%2CIntl.PluralRules.~locale.en%2CIntl.NumberFormat%2CIntl.NumberFormat.~locale.en%2CIntl.DisplayNames%2CIntl.DisplayNames.~locale.en%2CIntl.DateTimeFormat%2CIntl.DateTimeFormat.~locale.en%2CIntl.DateTimeFormat.prototype.formatToParts&amp;flags=gated"></script>
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/d399403192974b50.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/d399403192974b50.css" data-n-g="" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/bfae40a6caf02d10.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/bfae40a6caf02d10.css" data-n-p="" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/47ca1b8b706cc037.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/47ca1b8b706cc037.css" data-n-p="" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/8dd8d037a1437460.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/8dd8d037a1437460.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/8902f016e2bdf2d8.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/8902f016e2bdf2d8.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/21f7a82ab6ab81bb.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/21f7a82ab6ab81bb.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/945caaa305a623c0.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/945caaa305a623c0.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/0bc5db34f8c6bdee.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/0bc5db34f8c6bdee.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/4562810d13544b3c.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/4562810d13544b3c.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/456c431c535d051a.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/456c431c535d051a.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/c9d88bc2edc1c0d2.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/c9d88bc2edc1c0d2.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/e1a305d439d5f4da.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/e1a305d439d5f4da.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/28d73bebbdabd188.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/28d73bebbdabd188.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/c6ecbe583fe8137f.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/c6ecbe583fe8137f.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/e0fef94bf8ced77b.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/e0fef94bf8ced77b.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/086b4b3958a1c44b.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/086b4b3958a1c44b.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/47c3c294bc935ca3.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/47c3c294bc935ca3.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/846f4a1aafccbe4a.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/846f4a1aafccbe4a.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/abb18ba2687c20a0.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/abb18ba2687c20a0.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/d81cff07fe472432.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/d81cff07fe472432.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/0d7a368346a90fb0.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/0d7a368346a90fb0.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/a0afab39e15964c7.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/a0afab39e15964c7.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/fb946ce736caa3b2.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/fb946ce736caa3b2.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/9db46d0383db1a96.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/9db46d0383db1a96.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/8fa9955edcf736ef.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/8fa9955edcf736ef.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/9efe9548e03a9d43.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/9efe9548e03a9d43.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/e4ab0e3638a45cfe.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/e4ab0e3638a45cfe.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/119b960c4a0396c8.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/119b960c4a0396c8.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/4bf8fb6d3e597db4.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/4bf8fb6d3e597db4.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/b168da85aa9121dc.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/b168da85aa9121dc.css" />
-    <link rel="preload" href="https://www.revolut.com/_next/static/css/fef8e53017e8c936.css" as="style" />
-    <link rel="stylesheet" href="https://www.revolut.com/_next/static/css/fef8e53017e8c936.css" /><noscript data-n-css=""></noscript>
-    <script defer="" nomodule="" src="https://www.revolut.com/_next/static/chunks/polyfills-42372ed130431b0a.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/5400-e0eff4f5b6dbf49c.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/5474.55358ab9e5584f60.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/6024.5d37abc317388476.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/1768.76a0aa4e94109aa0.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/143.9d48954729a6fd31.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/9441.91d8fd904ddf6e06.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/7520.7409ae10c766d1f2.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/2876.946d3a468a2bf724.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/4330.9373b947e73b009e.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/7606.b308f29ddbe837d1.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/890.0ad1e4787220abaa.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/5258.271bd341fdbfc30e.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/4680.a55c51abd414689d.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/1109.5f24fe4d5fa3e149.js"></script>
-    <script defer="" src="https://www.revolut.com/_next/static/chunks/8710.20058730caa16d1e.js"></script>
-    <script src="https://www.revolut.com/_next/static/chunks/webpack-6d04046fbe246ef8.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/framework-f3100f6256206564.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/main-18e69d94c1439b1a.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/pages/_app-ce46e7bc7797e4b6.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/1891-cbd27ce5aa786816.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/1143-26d8834eb1e633a7.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/42-f1ee14f69b7366a5.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/7171-7749e899de2e18a3.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/7223-4580c651598abe51.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/8963-2168483bece3ff7b.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/1683-d87a287bb25184ce.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/8628-24bca6b909b4835a.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/510-7a0c9d63e566648f.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/6250-7ab59a47af3aad78.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/7625-92e8a840e163353a.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/36-6a13318054a1a535.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/9446-5c69d5e44938d8d9.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/2687-0b64c9e0c04b2008.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/8867-49fdc722bd2e879d.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/chunks/pages/index-5dcdc53560997af9.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/dmdbUFp_UuMDVsAvI9Iao/_buildManifest.js" defer=""></script>
-    <script src="https://www.revolut.com/_next/static/dmdbUFp_UuMDVsAvI9Iao/_ssgManifest.js" defer=""></script>
+    
+    
+    
+    <link rel="preload" href="/www.revolut.com/_next/static/css/d399403192974b50.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/d399403192974b50.css" data-n-g="" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/bfae40a6caf02d10.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/bfae40a6caf02d10.css" data-n-p="" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/47ca1b8b706cc037.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/47ca1b8b706cc037.css" data-n-p="" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/8dd8d037a1437460.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/8dd8d037a1437460.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/8902f016e2bdf2d8.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/8902f016e2bdf2d8.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/21f7a82ab6ab81bb.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/21f7a82ab6ab81bb.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/945caaa305a623c0.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/945caaa305a623c0.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/0bc5db34f8c6bdee.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/0bc5db34f8c6bdee.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/4562810d13544b3c.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/4562810d13544b3c.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/456c431c535d051a.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/456c431c535d051a.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/c9d88bc2edc1c0d2.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/c9d88bc2edc1c0d2.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/e1a305d439d5f4da.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/e1a305d439d5f4da.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/28d73bebbdabd188.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/28d73bebbdabd188.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/c6ecbe583fe8137f.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/c6ecbe583fe8137f.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/e0fef94bf8ced77b.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/e0fef94bf8ced77b.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/086b4b3958a1c44b.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/086b4b3958a1c44b.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/47c3c294bc935ca3.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/47c3c294bc935ca3.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/846f4a1aafccbe4a.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/846f4a1aafccbe4a.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/abb18ba2687c20a0.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/abb18ba2687c20a0.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/d81cff07fe472432.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/d81cff07fe472432.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/0d7a368346a90fb0.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/0d7a368346a90fb0.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/a0afab39e15964c7.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/a0afab39e15964c7.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/fb946ce736caa3b2.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/fb946ce736caa3b2.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/9db46d0383db1a96.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/9db46d0383db1a96.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/8fa9955edcf736ef.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/8fa9955edcf736ef.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/9efe9548e03a9d43.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/9efe9548e03a9d43.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/e4ab0e3638a45cfe.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/e4ab0e3638a45cfe.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/119b960c4a0396c8.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/119b960c4a0396c8.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/4bf8fb6d3e597db4.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/4bf8fb6d3e597db4.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/b168da85aa9121dc.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/b168da85aa9121dc.css" />
+    <link rel="preload" href="/www.revolut.com/_next/static/css/fef8e53017e8c936.css" as="style" />
+    <link rel="stylesheet" href="/www.revolut.com/_next/static/css/fef8e53017e8c936.css" /><noscript data-n-css=""></noscript>
+    <script defer src="/www.revolut.com/_next/static/chunks/5400-e0eff4f5b6dbf49c.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/5474.55358ab9e5584f60.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/6024.5d37abc317388476.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/1768.76a0aa4e94109aa0.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/143.9d48954729a6fd31.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/9441.91d8fd904ddf6e06.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/7520.7409ae10c766d1f2.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/2876.946d3a468a2bf724.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/4330.9373b947e73b009e.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/7606.b308f29ddbe837d1.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/890.0ad1e4787220abaa.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/5258.271bd341fdbfc30e.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/4680.a55c51abd414689d.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/1109.5f24fe4d5fa3e149.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/8710.20058730caa16d1e.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/webpack-6d04046fbe246ef8.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/framework-f3100f6256206564.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/main-18e69d94c1439b1a.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/pages/_app-ce46e7bc7797e4b6.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/1891-cbd27ce5aa786816.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/1143-26d8834eb1e633a7.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/42-f1ee14f69b7366a5.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/7171-7749e899de2e18a3.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/7223-4580c651598abe51.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/8963-2168483bece3ff7b.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/1683-d87a287bb25184ce.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/8628-24bca6b909b4835a.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/510-7a0c9d63e566648f.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/6250-7ab59a47af3aad78.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/7625-92e8a840e163353a.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/36-6a13318054a1a535.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/9446-5c69d5e44938d8d9.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/2687-0b64c9e0c04b2008.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/8867-49fdc722bd2e879d.js"></script>
+    <script defer src="/www.revolut.com/_next/static/chunks/pages/index-5dcdc53560997af9.js"></script>
+    <script defer src="/www.revolut.com/_next/static/dmdbUFp_UuMDVsAvI9Iao/_buildManifest.js"></script>
+    <script defer src="/www.revolut.com/_next/static/dmdbUFp_UuMDVsAvI9Iao/_ssgManifest.js"></script>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     <style data-styled="" data-styled-version="6.4.2">
         .jHusHA {
             color: var(--rui-color-white);
@@ -3670,47 +4858,22 @@
 </head>
 
 <body>
-    <div id="__next"><span class="_1nl0pqg0" data-theme="light" data-theme-accessible="true" data-theme-background="minimal"><header data-blockid="navigation" class="Box-rui__sc-1475jr3-0 dIUuxU xcnqt43" style="--xcnqt40:0px;--xcnqt41:0px;--xcnqt42:0px"><div class="Box-rui__sc-1475jr3-0 dIUuxU xcnqt45"><div class="Box-rui__sc-1475jr3-0 dIUuxU xcnqt46"><a class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc _1l8bqg50" title="Revolut" href="/"><span title="Revolut" class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 iXEEBC gzrhHD"><svg class="_1x9edjj0 _1x9edjj1" fill="var(--rui-color-white)" viewBox="0 0 145 32" xmlns="http://www.w3.org/2000/svg"><path clip-rule="evenodd" d="m98.8039 0h5.6871v31.7312h-5.6871zm46.0571 13.3685v-4.92408h-5.881v-6.41996h-5.687v23.40534c0 2.1506.541 3.7895 1.608 4.8714 1.066 1.0828 2.728 1.6317 4.939 1.6317h5.021v-4.924h-3.674c-.799 0-1.372-.1757-1.704-.5226-.305-.3175-.503-1.1195-.503-2.043v-11.0748zm-84.6893 12.1865 5.8804-17.11125h5.9749l-8.4889 23.28775h-6.7327l-8.489-23.28775h5.9749zm63.8513-5.4451c0 1.4743-.224 2.7569-.664 3.8121-.437 1.0495-1.063 1.8541-1.861 2.3908s-1.779.8089-2.916.8089c-1.626 0-2.853-.5344-3.646-1.5878-.802-1.0646-1.209-2.6781-1.209-4.7954v-12.29412h-5.687v12.92272c0 2.0122.251 3.7189.748 5.0721.497 1.3573 1.18 2.4614 2.029 3.281.849.8187 1.84 1.41 2.946 1.7581 1.1.3463 2.284.5217 3.518.5217 1.778 0 3.25-.3225 4.373-.9586 1.024-.5819 1.883-1.2622 2.555-2.0251l.509 2.7148h4.992v-23.28672h-5.687zm-33.913-10.43745c-1.7923-.99372-3.9206-1.49716-6.3249-1.49716-2.3749 0-4.4953.50344-6.3024 1.49684-1.8092.99597-3.2308 2.40247-4.2254 4.18037-.9931 1.7763-1.4966 3.8817-1.4966 6.2574 0 2.3466.5035 4.4373 1.4966 6.2136.994 1.7773 2.4159 3.1835 4.2254 4.1793 1.8071.9935 3.9276 1.4969 6.3024 1.4969 2.4042 0 4.5325-.5034 6.3249-1.4972 1.7942-.9953 3.2082-2.4014 4.2026-4.179.9934-1.7773 1.4971-3.868 1.4971-6.2136 0-2.3748-.5037-4.4802-1.4971-6.2575-.995-1.7781-2.4087-3.1847-4.2026-4.17995zm-3.0047 16.63905c-.9162.5966-2.0332.8993-3.3199.8993-1.2572 0-2.367-.3026-3.2986-.8995-.9332-.5976-1.665-1.441-2.1757-2.5072-.5128-1.0672-.7732-2.3099-.7732-3.6942 0-1.4128.2601-2.6627.7732-3.7154.5104-1.0518 1.2428-1.8955 2.1769-2.5081.9313-.612 2.0408-.9222 3.2973-.9222 1.2861 0 2.4025.3102 3.319.9215.9191.613 1.6443 1.457 2.1559 2.5091.5125 1.0552.7725 2.3052.7725 3.7152 0 1.3811-.26 2.6242-.7725 3.6941-.5115 1.0664-1.2364 1.9099-2.1549 2.5074zm-81.19475-18.48035h-5.91055v23.90035h5.91055zm18.53525 1.36671c0-5.07148-4.1298-9.19751668-9.2063-9.19751668h-15.2395v5.10407668h14.5149c2.2974 0 4.2004 1.80488 4.2425 4.02316.021 1.11072-.3959 2.15902-1.1738 2.95172-.7782.7929-1.818 1.2299-2.9278 1.2299h-5.65434c-.20074 0-.36413.1631-.36413.3639v4.5363c0 .0772.02383.1509.06866.213l9.59341 13.3092h7.0225l-9.6157-13.3456c4.8425-.2431 8.7396-4.3118 8.7396-9.18814zm18.1745.33907c-1.7026-.90368-3.7242-1.36164-6.0087-1.36164-2.2874 0-4.3325.50376-6.0787 1.4978-1.7491.99501-3.1251 2.40181-4.0897 4.18061-.9636 1.7748-1.452 3.8949-1.452 6.3017 0 2.3457.4959 4.4357 1.4746 6.2123.9808 1.7807 2.3955 3.1797 4.2041 4.158 1.8052.9784 3.9706 1.4743 6.4354 1.4743 1.9554 0 3.7114-.3663 5.2192-1.0894 1.5081-.7249 2.7393-1.712 3.6596-2.9341.8742-1.1615 1.464-2.4752 1.7525-3.9042l.0311-.1525h-5.6559l-.0267.0916c-.3114 1.0659-.9156 1.9081-1.7964 2.5038-.9454.6405-2.1066.9654-3.4519.9654-1.1402 0-2.17-.2443-3.0605-.7261-.8862-.479-1.5791-1.164-2.059-2.0367-.4818-.8757-.756-1.9294-.8146-3.1254v-.187h17.0842l.0191-.1044c.0596-.3278.0979-.6656.1145-1.0053.0141-.331.0223-.6616.0223-.9953-.0305-2.2563-.5348-4.2409-1.4987-5.8993-.9677-1.6603-2.3215-2.9605-4.0238-3.86417zm-2.0724 4.38547c.9717.8178 1.5762 1.9799 1.7979 3.4564h-11.2467c.1285-.958.4466-1.7877.9463-2.4683.5242-.7139 1.1957-1.2748 1.9962-1.6672.8014-.3936 1.6813-.5934 2.6148-.5934 1.5781-.0001 2.8874.4281 3.8915 1.2725z" fill-rule="evenodd"></path></svg></span></a>
-        <div
-            class="Box-rui__sc-1475jr3-0 dzMeWP xcnqt47">
-            <div class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 eynGfs _3jquhb2">
-                <div class="Box-rui__sc-1475jr3-0 dIUuxU _3jquhb6"><a data-pending="false" class="ButtonBase__ButtonBaseWrapper-rui__sc-1kvyxgj-1 eoTkuX ButtonBase-rui__sc-1kvyxgj-2 ButtonLayout__StyledButtonBase-rui__sc-po3gd3-2 eGcQbb Button-rui__sc-43qi8e-0 hwEpEy _16881lo8 _11e31n40 _11e31n41 _11e31n42 _11e31n44 _11e31n46 _11e31n48 _11e31n49 _3jquhb3 _3jquhb4"
-                        style="--_3jquhb0:var(--rui-color-white);--_3jquhb1:var(--website-navigation-button-hover-background)" href="/" aria-disabled="false"><span data-rui="state-layer" class="ButtonBase__ButtonStateLayer-rui__sc-1kvyxgj-0 dcaAJA"></span><span class="Ellipsis__EllipsisBase-rui__sc-88yoza-0 dLKIrZ">Personal</span></a></div>
-                <div
-                    class="Box-rui__sc-1475jr3-0 dIUuxU _3jquhb6"><a data-pending="false" class="ButtonBase__ButtonBaseWrapper-rui__sc-1kvyxgj-1 eoTkuX ButtonBase-rui__sc-1kvyxgj-2 ButtonLayout__StyledButtonBase-rui__sc-po3gd3-2 eGcQbb Button-rui__sc-43qi8e-0 hwEpEy _16881lo8 _11e31n40 _11e31n41 _11e31n42 _11e31n44 _11e31n46 _11e31n48 _11e31n49 _3jquhb3 _3jquhb4"
-                        style="--_3jquhb0:var(--rui-color-white);--_3jquhb1:var(--website-navigation-button-hover-background)" href="/business/" aria-disabled="false"><span data-rui="state-layer" class="ButtonBase__ButtonStateLayer-rui__sc-1kvyxgj-0 dcaAJA"></span><span class="Ellipsis__EllipsisBase-rui__sc-88yoza-0 dLKIrZ">Business</span></a></div>
-            <div
-                class="Box-rui__sc-1475jr3-0 dIUuxU _3jquhb6"><button data-pending="false" class="ButtonBase__ButtonBaseWrapper-rui__sc-1kvyxgj-1 eoTkuX ButtonBase-rui__sc-1kvyxgj-2 ButtonLayout__StyledButtonBase-rui__sc-po3gd3-2 eGcQbb Button-rui__sc-43qi8e-0 hwEpEy _16881lo8 _11e31n40 _11e31n41 _11e31n42 _11e31n44 _11e31n46 _11e31n48 _11e31n49 _3jquhb3 _3jquhb5"
-                    style="--_3jquhb0:var(--rui-color-white);--_3jquhb1:var(--website-navigation-button-hover-background)" type="button"><span data-rui="state-layer" class="ButtonBase__ButtonStateLayer-rui__sc-1kvyxgj-0 dcaAJA"></span><span class="Ellipsis__EllipsisBase-rui__sc-88yoza-0 dLKIrZ"><span style="pointer-events:none" class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc">Kids &amp; Teens</span></span></button></div>
-    <div
-        class="Box-rui__sc-1475jr3-0 dIUuxU _3jquhb6"><a data-pending="false" class="ButtonBase__ButtonBaseWrapper-rui__sc-1kvyxgj-1 eoTkuX ButtonBase-rui__sc-1kvyxgj-2 ButtonLayout__StyledButtonBase-rui__sc-po3gd3-2 eGcQbb Button-rui__sc-43qi8e-0 hwEpEy _16881lo8 _11e31n40 _11e31n41 _11e31n42 _11e31n44 _11e31n46 _11e31n48 _11e31n49 _3jquhb3 _3jquhb4"
-            style="--_3jquhb0:var(--rui-color-white);--_3jquhb1:var(--website-navigation-button-hover-background)" href="/discover-our-company/" aria-disabled="false"><span data-rui="state-layer" class="ButtonBase__ButtonStateLayer-rui__sc-1kvyxgj-0 dcaAJA"></span><span class="Ellipsis__EllipsisBase-rui__sc-88yoza-0 dLKIrZ">Company</span></a></div>
-        </div><span class="_1nl0pqg0" data-theme="dark" data-theme-accessible="true" data-theme-background="minimal"><div class="Box-rui__sc-1475jr3-0 fSVXYH"><span class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 HStack-rui__sc-561s3a-0 kixsLc eiJWEf nvPqN"><a data-pending="false" class="ButtonBase__ButtonBaseWrapper-rui__sc-1kvyxgj-1 eoTkuX ButtonBase-rui__sc-1kvyxgj-2 ButtonLayout__StyledButtonBase-rui__sc-po3gd3-2 eGcQbb Button-rui__sc-43qi8e-0 FQyyM _16881lo8 _11e31n40 _11e31n41 _11e31n42 _11e31n44 _11e31n46 _11e31n48 _11e31n4a" href="https://app.revolut.com/start" aria-disabled="false"><span data-rui="state-layer" class="ButtonBase__ButtonStateLayer-rui__sc-1kvyxgj-0 dcaAJA"></span>
-        <span
-            class="Ellipsis__EllipsisBase-rui__sc-88yoza-0 dLKIrZ">Log in</span>
-            </a><a data-pending="false" class="ButtonBase__ButtonBaseWrapper-rui__sc-1kvyxgj-1 eoTkuX ButtonBase-rui__sc-1kvyxgj-2 ButtonLayout__StyledButtonBase-rui__sc-po3gd3-2 eGcQbb Button-rui__sc-43qi8e-0 hwEpEy _16881lo8 _11e31n40 _11e31n41 _11e31n42 _11e31n44 _11e31n46 _11e31n48 _11e31n4b"
-                data-blockid="signup-button" href="https://revolut.com/app" aria-disabled="false"><span data-rui="state-layer" class="ButtonBase__ButtonStateLayer-rui__sc-1kvyxgj-0 dcaAJA"></span><span class="Ellipsis__EllipsisBase-rui__sc-88yoza-0 dLKIrZ">Sign up</span></a></span>
-            </div>
-            </span>
-            </div>
-            <div class="Box-rui__sc-1475jr3-0 XurCF"><button aria-label="Open menu" data-variant="mono" data-rui="icon" style="--rui-icon-url:url(&#x27;https://assets.revolut.com/assets/icons/Menu.svg&#x27;)" class="Icon-rui__sc-1bjb4yp-0 jHusHA"></button></div>
-            </div>
-            <div class="Box-rui__sc-1475jr3-0 dIUuxU _8sxmtqd"></div>
-            <nav role="navigation" class="Box-rui__sc-1475jr3-0 dIUuxU _8sxmtq1 _8sxmtq3" style="--_8sxmtq0:auto">
-                <div class="Box-rui__sc-1475jr3-0 dIUuxU _8sxmtq4"><a class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc _1l8bqg50" title="Revolut" href="/"><span title="Revolut" class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 iXEEBC gzrhHD"><svg class="_1x9edjj0 _1x9edjj1" fill="white" viewBox="0 0 145 32" xmlns="http://www.w3.org/2000/svg"><path clip-rule="evenodd" d="m98.8039 0h5.6871v31.7312h-5.6871zm46.0571 13.3685v-4.92408h-5.881v-6.41996h-5.687v23.40534c0 2.1506.541 3.7895 1.608 4.8714 1.066 1.0828 2.728 1.6317 4.939 1.6317h5.021v-4.924h-3.674c-.799 0-1.372-.1757-1.704-.5226-.305-.3175-.503-1.1195-.503-2.043v-11.0748zm-84.6893 12.1865 5.8804-17.11125h5.9749l-8.4889 23.28775h-6.7327l-8.489-23.28775h5.9749zm63.8513-5.4451c0 1.4743-.224 2.7569-.664 3.8121-.437 1.0495-1.063 1.8541-1.861 2.3908s-1.779.8089-2.916.8089c-1.626 0-2.853-.5344-3.646-1.5878-.802-1.0646-1.209-2.6781-1.209-4.7954v-12.29412h-5.687v12.92272c0 2.0122.251 3.7189.748 5.0721.497 1.3573 1.18 2.4614 2.029 3.281.849.8187 1.84 1.41 2.946 1.7581 1.1.3463 2.284.5217 3.518.5217 1.778 0 3.25-.3225 4.373-.9586 1.024-.5819 1.883-1.2622 2.555-2.0251l.509 2.7148h4.992v-23.28672h-5.687zm-33.913-10.43745c-1.7923-.99372-3.9206-1.49716-6.3249-1.49716-2.3749 0-4.4953.50344-6.3024 1.49684-1.8092.99597-3.2308 2.40247-4.2254 4.18037-.9931 1.7763-1.4966 3.8817-1.4966 6.2574 0 2.3466.5035 4.4373 1.4966 6.2136.994 1.7773 2.4159 3.1835 4.2254 4.1793 1.8071.9935 3.9276 1.4969 6.3024 1.4969 2.4042 0 4.5325-.5034 6.3249-1.4972 1.7942-.9953 3.2082-2.4014 4.2026-4.179.9934-1.7773 1.4971-3.868 1.4971-6.2136 0-2.3748-.5037-4.4802-1.4971-6.2575-.995-1.7781-2.4087-3.1847-4.2026-4.17995zm-3.0047 16.63905c-.9162.5966-2.0332.8993-3.3199.8993-1.2572 0-2.367-.3026-3.2986-.8995-.9332-.5976-1.665-1.441-2.1757-2.5072-.5128-1.0672-.7732-2.3099-.7732-3.6942 0-1.4128.2601-2.6627.7732-3.7154.5104-1.0518 1.2428-1.8955 2.1769-2.5081.9313-.612 2.0408-.9222 3.2973-.9222 1.2861 0 2.4025.3102 3.319.9215.9191.613 1.6443 1.457 2.1559 2.5091.5125 1.0552.7725 2.3052.7725 3.7152 0 1.3811-.26 2.6242-.7725 3.6941-.5115 1.0664-1.2364 1.9099-2.1549 2.5074zm-81.19475-18.48035h-5.91055v23.90035h5.91055zm18.53525 1.36671c0-5.07148-4.1298-9.19751668-9.2063-9.19751668h-15.2395v5.10407668h14.5149c2.2974 0 4.2004 1.80488 4.2425 4.02316.021 1.11072-.3959 2.15902-1.1738 2.95172-.7782.7929-1.818 1.2299-2.9278 1.2299h-5.65434c-.20074 0-.36413.1631-.36413.3639v4.5363c0 .0772.02383.1509.06866.213l9.59341 13.3092h7.0225l-9.6157-13.3456c4.8425-.2431 8.7396-4.3118 8.7396-9.18814zm18.1745.33907c-1.7026-.90368-3.7242-1.36164-6.0087-1.36164-2.2874 0-4.3325.50376-6.0787 1.4978-1.7491.99501-3.1251 2.40181-4.0897 4.18061-.9636 1.7748-1.452 3.8949-1.452 6.3017 0 2.3457.4959 4.4357 1.4746 6.2123.9808 1.7807 2.3955 3.1797 4.2041 4.158 1.8052.9784 3.9706 1.4743 6.4354 1.4743 1.9554 0 3.7114-.3663 5.2192-1.0894 1.5081-.7249 2.7393-1.712 3.6596-2.9341.8742-1.1615 1.464-2.4752 1.7525-3.9042l.0311-.1525h-5.6559l-.0267.0916c-.3114 1.0659-.9156 1.9081-1.7964 2.5038-.9454.6405-2.1066.9654-3.4519.9654-1.1402 0-2.17-.2443-3.0605-.7261-.8862-.479-1.5791-1.164-2.059-2.0367-.4818-.8757-.756-1.9294-.8146-3.1254v-.187h17.0842l.0191-.1044c.0596-.3278.0979-.6656.1145-1.0053.0141-.331.0223-.6616.0223-.9953-.0305-2.2563-.5348-4.2409-1.4987-5.8993-.9677-1.6603-2.3215-2.9605-4.0238-3.86417zm-2.0724 4.38547c.9717.8178 1.5762 1.9799 1.7979 3.4564h-11.2467c.1285-.958.4466-1.7877.9463-2.4683.5242-.7139 1.1957-1.2748 1.9962-1.6672.8014-.3936 1.6813-.5934 2.6148-.5934 1.5781-.0001 2.8874.4281 3.8915 1.2725z" fill-rule="evenodd"></path></svg></span></a>
-                    <button
-                        aria-label="Close" data-variant="mono" data-rui="icon" style="--rui-icon-url:url(&#x27;https://assets.revolut.com/assets/icons/Cross.svg&#x27;)" class="Icon-rui__sc-1bjb4yp-0 jHusHA"></button>
-                </div>
-                <div class="Box-rui__sc-1475jr3-0 dIUuxU _8sxmtq5">
-                    <div class="Box-rui__sc-1475jr3-0 dIUuxU _8sxmtq7 _8sxmtq9">
-                        <div class="Box-rui__sc-1475jr3-0 dIUuxU _8sxmtqa _8sxmtqc">
-                            <div class="Box-rui__sc-1475jr3-0 dIUuxU _1c0faq64"></div>
-                        </div>
-                    </div>
-                </div>
-            </nav>
-            </div>
-            </header>
+    <div id="__next"><span class="_1nl0pqg0" data-theme="light" data-theme-accessible="true" data-theme-background="minimal"><header class="simple-site-header" data-blockid="navigation">
+  <a class="simple-site-header__brand" href="/" aria-label="Revoulter home">revoulter</a>
+  <nav class="simple-site-header__links" aria-label="Main navigation">
+    <a href="/">Personal</a>
+    <a href="/business/">Business</a>
+    <a href="/cards/">Cards</a>
+    <a href="/our-pricing-plans/">Plans</a>
+    <a href="/en-GB/crypto/">Crypto</a>
+    <a href="/discover-our-company/">Company</a>
+    <a href="/help/">Help</a>
+  </nav>
+  <div class="simple-site-header__actions">
+    <a class="simple-site-header__login" href="https://app.revolut.com/start">Log in</a>
+    <a class="simple-site-header__signup" href="https://revolut.com/app">Get started</a>
+  </div>
+</header>
             </span>
             <style>
                 .page-layout__base section[data-blockid="f3ff6372-53a2-43d5-b3ff-8d1a14f1e5d2"] {
@@ -3729,14 +4892,12 @@
                         <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 kYjNIg bvLCyt jauuRS">
                             <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Absolute-rui__sc-o54rtt-2 ievSqM bvLCyt dImZqz k3clxj0">
                                 <picture>
-                                    <source srcSet="https://assets.revolut.com/published-assets-v3/4bcf4f81-c0b1-4bde-82f5-0b4cd2ddd2ef/2f242895-e89a-44d3-9f8a-fb78b32d80c5.png 1080w, https://assets.revolut.com/published-assets-v3/4bcf4f81-c0b1-4bde-82f5-0b4cd2ddd2ef/f94bbcee-b4a0-49f2-8043-c472b47d0ac7.png 2048w, https://assets.revolut.com/published-assets-v3/4bcf4f81-c0b1-4bde-82f5-0b4cd2ddd2ef/61f4df02-d372-4ced-86ef-cb50176593a7.png 3840w"
-                                        type="image/webp" /><img alt="" src="https://assets.revolut.com/published-assets-v3/c396d86b-9059-4343-9289-fb1490dc281d/07149e7f-0850-47db-bd67-5a93e1cfa8e6.png" srcSet="https://assets.revolut.com/published-assets-v3/4bcf4f81-c0b1-4bde-82f5-0b4cd2ddd2ef/2f242895-e89a-44d3-9f8a-fb78b32d80c5.png 1080w, https://assets.revolut.com/published-assets-v3/4bcf4f81-c0b1-4bde-82f5-0b4cd2ddd2ef/f94bbcee-b4a0-49f2-8043-c472b47d0ac7.png 2048w, https://assets.revolut.com/published-assets-v3/4bcf4f81-c0b1-4bde-82f5-0b4cd2ddd2ef/61f4df02-d372-4ced-86ef-cb50176593a7.png 3840w"
-                                        loading="lazy" width="1440" height="800" decoding="async" class="k3clxj1" style="color:transparent;transition-timing-function:cubic-bezier(0.35, 0.00, 0.00, 1.00);transition-property:transform;transform:translate(-50%, 0px) scale(1.58);transition-duration:0ms;transition-delay:100ms"
+                                    <img alt="" src="https://assets.revolut.com/published-assets-v3/4bcf4f81-c0b1-4bde-82f5-0b4cd2ddd2ef/2f242895-e89a-44d3-9f8a-fb78b32d80c5.png"
+                                        loading="eager" fetchpriority="high" width="1440" height="800" decoding="async" class="k3clxj1" style="color:transparent;transition-timing-function:cubic-bezier(0.35, 0.00, 0.00, 1.00);transition-property:transform;transform:translate(-50%, 0px) scale(1.58);transition-duration:0ms;transition-delay:100ms"
                                     /></picture>
                                 <picture>
-                                    <source srcSet="https://assets.revolut.com/published-assets-v3/c1d9d317-7303-4f79-8756-937632237bb5/2442a1d3-8d03-44b9-a046-db33242f100a.png 1080w, https://assets.revolut.com/published-assets-v3/c1d9d317-7303-4f79-8756-937632237bb5/0eb1515a-91e8-4d4e-8e19-ff7c82de5410.png 2048w, https://assets.revolut.com/published-assets-v3/c1d9d317-7303-4f79-8756-937632237bb5/344c3cc7-0d4d-4749-8f12-b677d289a4a5.png 3840w"
-                                        type="image/webp" /><img alt="" src="https://assets.revolut.com/published-assets-v3/988d267e-b628-453c-bdfe-0c5beeb1d233/58acb31c-cd5d-41bc-a8df-4b49f4f09e58.png" srcSet="https://assets.revolut.com/published-assets-v3/c1d9d317-7303-4f79-8756-937632237bb5/2442a1d3-8d03-44b9-a046-db33242f100a.png 1080w, https://assets.revolut.com/published-assets-v3/c1d9d317-7303-4f79-8756-937632237bb5/0eb1515a-91e8-4d4e-8e19-ff7c82de5410.png 2048w, https://assets.revolut.com/published-assets-v3/c1d9d317-7303-4f79-8756-937632237bb5/344c3cc7-0d4d-4749-8f12-b677d289a4a5.png 3840w"
-                                        loading="lazy" width="1440" height="800" decoding="async" class="k3clxj2" style="color:transparent;transition-timing-function:cubic-bezier(0.35, 0.00, 0.00, 1.00);transition-property:transform;transform:translate(-50%, 0px) scale(1.58);transition-duration:0ms;transition-delay:100ms"
+                                    <img alt="" src="https://assets.revolut.com/published-assets-v3/c1d9d317-7303-4f79-8756-937632237bb5/2442a1d3-8d03-44b9-a046-db33242f100a.png"
+                                        loading="eager" fetchpriority="high" width="1440" height="800" decoding="async" class="k3clxj2" style="color:transparent;transition-timing-function:cubic-bezier(0.35, 0.00, 0.00, 1.00);transition-property:transform;transform:translate(-50%, 0px) scale(1.58);transition-duration:0ms;transition-delay:100ms"
                                     /></picture>
                             </div>
                             <section class="Box-rui__sc-1475jr3-0 leNKuJ">
@@ -3969,7 +5130,7 @@
                                 </div>
                             </section>
                         </div>
-                        </span><span class="_1nl0pqg0" data-theme="dark" data-theme-accessible="true" data-theme-background="minimal"><div class="Box-rui__sc-1475jr3-0 dAuYBJ"><section id="e7a957ad-b891-4afa-bafe-6cb1eea2ec02" data-blockid="e7a957ad-b891-4afa-bafe-6cb1eea2ec02" class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 dIUuxU bvLCyt jauuRS _19w9erl0 _19w9erl1 _19w9erl6"><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Absolute-rui__sc-o54rtt-2 dIUuxU bvLCyt dImZqz _1b5jxmm0 _1b5jxmm1"><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><video class="_1n0eu9s0 _1qlo59e2" muted="" playsinline="" aria-hidden="true" style="--_1qlo59e0:cover;--_1qlo59e1:cover"><source src="https://assets.revolut.com/published-assets-v3/a3f03841-ddde-4f99-bf75-c2cacf2558b4/eb48080b-a584-4744-9c09-15943a9c0781.mp4" type="video/mp4"/></video></div></div></div><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Absolute-rui__sc-o54rtt-2 fLFYKc bvLCyt dImZqz _1b5jxmm0 _1b5jxmm1"><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><video class="_1n0eu9s0 _1qlo59e2" muted="" playsinline="" aria-hidden="true" style="--_1qlo59e0:cover;--_1qlo59e1:cover"><source src="https://assets.revolut.com/published-assets-v3/808aee1c-ad2e-4005-ae3c-5ce1a5a0837e/7cf0d9a5-2d49-47cc-8b05-da204ccaa15e.mp4" type="video/mp4"/></video></div></div></div><div class="Box-rui__sc-1475jr3-0 dIUuxU _1fw2odl0 _1fw2odl2 _1fw2odl5 _1yxq2aed _1yxq2aef"><div class="Box-rui__sc-1475jr3-0 Grid-rui__sc-v1xa51-0 dkCwdu eeosYg"><span class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 VStack-rui__sc-1o1h7kq-0 kXpJQp bpDMRq _1nenqvz0 _1nenqvz2 _1nenqvz4" style="visibility:visible"><h2 class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc hIcOqA">Elevate your spend</h2><span class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 VStack-rui__sc-1o1h7kq-0 eoYEuB deZUHv fQPVQP bpDMRq"><span class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc cDbcjE">Earn points on your purchases with one of our debit cards. Then redeem them for Airline Miles and other rewards. RevPoints T&amp;Cs apply.</span>
+                        </span><span class="_1nl0pqg0" data-theme="dark" data-theme-accessible="true" data-theme-background="minimal"><div class="Box-rui__sc-1475jr3-0 dAuYBJ"><section id="e7a957ad-b891-4afa-bafe-6cb1eea2ec02" data-blockid="e7a957ad-b891-4afa-bafe-6cb1eea2ec02" class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 dIUuxU bvLCyt jauuRS _19w9erl0 _19w9erl1 _19w9erl6"><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Absolute-rui__sc-o54rtt-2 dIUuxU bvLCyt dImZqz _1b5jxmm0 _1b5jxmm1"><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><img class="_1n0eu9s0 _1qlo59e2" src="/go-virtual-01.png_ac1095e7_2K.jpg" alt="Decorative image of Revoulter bank cards" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block" /></div></div></div><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Absolute-rui__sc-o54rtt-2 fLFYKc bvLCyt dImZqz _1b5jxmm0 _1b5jxmm1"><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><img class="_1n0eu9s0 _1qlo59e2" src="/go-virtual-01.png_ac1095e7_2K.jpg" alt="Decorative image of Revoulter bank cards" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block" /></div></div></div><div class="Box-rui__sc-1475jr3-0 dIUuxU _1fw2odl0 _1fw2odl2 _1fw2odl5 _1yxq2aed _1yxq2aef"><div class="Box-rui__sc-1475jr3-0 Grid-rui__sc-v1xa51-0 dkCwdu eeosYg"><span class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 VStack-rui__sc-1o1h7kq-0 kXpJQp bpDMRq _1nenqvz0 _1nenqvz2 _1nenqvz4" style="visibility:visible"><h2 class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc hIcOqA">Elevate your spend</h2><span class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 VStack-rui__sc-1o1h7kq-0 eoYEuB deZUHv fQPVQP bpDMRq"><span class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc cDbcjE">Earn points on your purchases with one of our debit cards. Then redeem them for Airline Miles and other rewards. RevPoints T&amp;Cs apply.</span>
                         <span
                             class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc gGeSYI">Some cards available on paid plans only. Fees may apply.</span>
                             </span><span class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 HStack-rui__sc-561s3a-0 lfmOnz kZTqYV dYMUti nvPqN"><a data-pending="false" class="ButtonBase__ButtonBaseWrapper-rui__sc-1kvyxgj-1 eoTkuX ButtonBase-rui__sc-1kvyxgj-2 ButtonLayout__StyledButtonBase-rui__sc-po3gd3-2 eGcQbb Button-rui__sc-43qi8e-0 hwEpEy _16881lo8 _11e31n40 _11e31n41 _11e31n42 _11e31n44 _11e31n46 _11e31n48 _11e31n4b" href="https://revolut.com/app" aria-disabled="false"><span data-rui="state-layer" class="ButtonBase__ButtonStateLayer-rui__sc-1kvyxgj-0 dcaAJA"></span>
@@ -3995,10 +5156,10 @@
                                     <section id="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e" data-blockid="62bd35ab-ee15-478c-9d1c-b1b5f8679c4e" class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 dIUuxU bvLCyt jauuRS _19w9erl0 _19w9erl1 _19w9erl6">
                                         <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Absolute-rui__sc-o54rtt-2 dIUuxU bvLCyt dImZqz _1b5jxmm0 _1b5jxmm1">
                                             <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS">
-                                                <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><video class="_1n0eu9s0 _1qlo59e2" muted="" playsinline="" aria-hidden="true" style="--_1qlo59e0:cover;--_1qlo59e1:cover"><source src="https://assets.revolut.com/published-assets-v3/4954fed1-0d3f-4a3c-ab32-4ddb30e34976/13038c65-2a71-424a-93cd-544b2c6152d4.mp4" type="video/mp4"/></video></div>
+                                                <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><img class="_1n0eu9s0 _1qlo59e2" src="/video-screenshots/ask-air.png" alt="Decorative image of the AIR investment assistant" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block" /></div>
                                             </div>
                                         </div>
-                                        <div class="Box-rui__sc-1475jr3-0 dIUuxU _1fw2odl0 _1fw2odl2 _1fw2odl5"><span class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 VStack-rui__sc-1o1h7kq-0 dMHFEx bpDMRq _1nenqvz0 _1nenqvz2 _1nenqvz4"><h2 class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc hIcOqA">Ask, and AIR makes it happen</h2><span class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 VStack-rui__sc-1o1h7kq-0 eoYEuB deZUHv fQPVQP bpDMRq"><span class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc cDbcjE"><p>AI by Revolut, AIR, is your 24/7 personal assistant. Just open your app, swipe, and ask away.</p></span></span>
+                                        <div class="Box-rui__sc-1475jr3-0 dIUuxU _1fw2odl0 _1fw2odl2 _1fw2odl5"><span class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 VStack-rui__sc-1o1h7kq-0 dMHFEx bpDMRq _1nenqvz0 _1nenqvz2 _1nenqvz4"><h2 class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc hIcOqA">Ask, and AIR makes it happen</h2><span class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 VStack-rui__sc-1o1h7kq-0 eoYEuB deZUHv fQPVQP bpDMRq"><span class="Box-rui__sc-1475jr3-0 Text-rui__sc-1mtagir-0 edWLUc cDbcjE"><p>AI by Revoulter, AIR, is your 24/7 personal assistant. Just open your app, swipe, and ask away.</p></span></span>
                                             <span
                                                 class="Box-rui__sc-1475jr3-0 Flex-rui__sc-1tnvnxg-0 Stack-rui__sc-1l68xd2-0 HStack-rui__sc-561s3a-0 lfmOnz kZTqYV dYMUti nvPqN"><a data-pending="false" class="ButtonBase__ButtonBaseWrapper-rui__sc-1kvyxgj-1 eoTkuX ButtonBase-rui__sc-1kvyxgj-2 ButtonLayout__StyledButtonBase-rui__sc-po3gd3-2 eGcQbb Button-rui__sc-43qi8e-0 hwEpEy _16881lo8 _11e31n40 _11e31n41 _11e31n42 _11e31n44 _11e31n46 _11e31n48 _11e31n4b"
                                                     href="/air-ai-by-revolut/" aria-disabled="false"><span data-rui="state-layer" class="ButtonBase__ButtonStateLayer-rui__sc-1kvyxgj-0 dcaAJA"></span><span class="Ellipsis__EllipsisBase-rui__sc-88yoza-0 dLKIrZ">Learn more</span></a></span>
@@ -4019,7 +5180,7 @@
                                                 <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 eWprkP bvLCyt jauuRS">
                                                     <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Absolute-rui__sc-o54rtt-2 dIUuxU bvLCyt dImZqz _1wsy6m0 _1wsy6m2" style="aspect-ratio:0.75">
                                                         <div style="aspect-ratio:0.75" class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS">
-                                                            <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><video class="_1n0eu9s0 _1qlo59e2" muted="" playsinline="" aria-hidden="true" style="--_1qlo59e0:contain;--_1qlo59e1:cover" width="100%"><source src="https://assets.revolut.com/published-assets-v3/7bf7c951-27c0-4ceb-9021-881e85ca6b25/332f5fdd-c0b9-44be-8dea-fc17b3d6ccdf.mp4" type="video/mp4"/></video></div>
+                                                            <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><img class="_1n0eu9s0 _1qlo59e2" src="/video-screenshots/safe-space.png" alt="Decorative image for account security" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 44%;display:block" /></div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -4038,8 +5199,7 @@
                                             <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 eWprkP bvLCyt jauuRS">
                                                 <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Absolute-rui__sc-o54rtt-2 dIUuxU bvLCyt dImZqz _1wsy6m0 _1wsy6m1">
                                                     <div style="aspect-ratio:1.6666666666666667" class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS">
-                                                        <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><video class="_1n0eu9s0 _1qlo59e2" muted="" playsinline="" aria-hidden="true" style="--_1qlo59e0:contain;--_1qlo59e1:contain" poster="https://assets.revolut.com/published-assets-v3/01f199ee-b3f2-4203-9ab7-27d133045284/a1b80bd3-607e-450e-80a0-83317969cf66.png"
-                                                                width="100%"><source src="https://assets.revolut.com/published-assets-v3/a07a910c-0df4-45f5-b0ca-7864377877a3/0da52da5-f59c-4863-a918-d8861c032000.mp4" type="video/mp4"/></video></div>
+                                                        <div class="Box-rui__sc-1475jr3-0 Position-rui__sc-o54rtt-0 Position__Relative-rui__sc-o54rtt-3 NxBVh bvLCyt jauuRS"><img class="_1n0eu9s0 _1qlo59e2" src="/stocks-etfs.png_8fca010d_2K.jpg" alt="Decorative image of Bitcoin and Ethereum coins" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block" /></div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -5549,14 +6709,8 @@
                                                 }
                                             },
                                             "cover": {
-                                                "video": {
-                                                    "value": "https://assets.revolut.com/published-assets-v3/5b4c4cc6-f5e3-4013-abb9-02ed70191f31/79c359d8-7025-4121-924b-b7880f97bcf4.mp4",
-                                                    "options": []
-                                                },
-                                                "videoSmall": {
-                                                    "value": "https://assets.revolut.com/published-assets-v3/a3f03841-ddde-4f99-bf75-c2cacf2558b4/eb48080b-a584-4744-9c09-15943a9c0781.mp4",
-                                                    "options": []
-                                                },
+                                                "image":{"value":"/go-virtual-01.png_ac1095e7_2K.jpg","codecName":"png","optimisedResources":[]},
+                                                "imageSmall":{"value":"/go-virtual-01.png_ac1095e7_2K.jpg","codecName":"png","optimisedResources":[]},
                                                 "align": "center"
                                             },
                                             "caption": "Physical cards",
@@ -5573,14 +6727,8 @@
                                                 }
                                             },
                                             "cover": {
-                                                "video": {
-                                                    "value": "https://assets.revolut.com/published-assets-v3/94a4cf97-5819-45b0-8219-b7b16e94ecac/959ae3c2-0d48-4c3e-a30e-2defda91b1f0.mp4",
-                                                    "options": []
-                                                },
-                                                "videoSmall": {
-                                                    "value": "https://assets.revolut.com/published-assets-v3/808aee1c-ad2e-4005-ae3c-5ce1a5a0837e/7cf0d9a5-2d49-47cc-8b05-da204ccaa15e.mp4",
-                                                    "options": []
-                                                },
+                                                "image":{"value":"/go-virtual-01.png_ac1095e7_2K.jpg","codecName":"png","optimisedResources":[]},
+                                                "imageSmall":{"value":"/go-virtual-01.png_ac1095e7_2K.jpg","codecName":"png","optimisedResources":[]},
                                                 "align": "center"
                                             },
                                             "caption": "Virtual cards"
@@ -5596,7 +6744,7 @@
                                     },
                                     "content": {
                                         "title": "Ask, and AIR makes it happen",
-                                        "description": "\u003cp\u003eAI by Revolut, AIR, is your 24/7 personal assistant. Just open your app, swipe, and ask away.\u003c/p\u003e",
+                                        "description": "\u003cp\u003eAI by Revoulter, AIR, is your 24/7 personal assistant. Just open your app, swipe, and ask away.\u003c/p\u003e",
                                         "button": {
                                             "label": "Learn more",
                                             "link": {
@@ -5611,14 +6759,8 @@
                                         "items": [{
                                             "id": "7c8d8c1e-f5a6-4c8f-84cd-dedfd3c387f7",
                                             "cover": {
-                                                "video": {
-                                                    "value": "https://assets.revolut.com/published-assets-v3/01191ed4-da4e-4f6b-927b-62523ffec28d/b2e3f4d8-5321-4e16-9942-34f83106159b.mp4",
-                                                    "options": []
-                                                },
-                                                "videoSmall": {
-                                                    "value": "https://assets.revolut.com/published-assets-v3/4954fed1-0d3f-4a3c-ab32-4ddb30e34976/13038c65-2a71-424a-93cd-544b2c6152d4.mp4",
-                                                    "options": []
-                                                },
+                                                "image":{"value":"/video-screenshots/ask-air.png","codecName":"png","optimisedResources":[]},
+                                                "imageSmall":{"value":"/video-screenshots/ask-air.png","codecName":"png","optimisedResources":[]},
                                                 "align": "center"
                                             }
                                         }],
@@ -5660,10 +6802,7 @@
                                             "cover": {
                                                 "align": "center"
                                             },
-                                            "video": {
-                                                "value": "https://assets.revolut.com/published-assets-v3/7bf7c951-27c0-4ceb-9021-881e85ca6b25/332f5fdd-c0b9-44be-8dea-fc17b3d6ccdf.mp4",
-                                                "options": []
-                                            }
+                                            "image":{"value":"/video-screenshots/safe-space.png","codecName":"png","optimisedResources":[]}
                                         }],
                                         "scrollAnimation": "parallax"
                                     }
@@ -5704,52 +6843,8 @@
                                             "cover": {
                                                 "align": "center"
                                             },
-                                            "image": {
-                                                "value": "https://assets.revolut.com/published-assets-v3/fff727bf-35fc-40d9-bcee-2d75329823e9/78eb1571-317e-468b-9315-2f10385cc607.png",
-                                                "codecName": "png",
-                                                "optimisedResources": [{
-                                                    "value": "https://assets.revolut.com/published-assets-v3/94150ea7-4f5d-4931-9947-ab0518bea769/b2282398-a78d-468b-8c1c-cc0546956198.webp",
-                                                    "optimisationParams": {
-                                                        "width": 1080,
-                                                        "quality": 75,
-                                                        "codecName": "webp"
-                                                    }
-                                                }, {
-                                                    "value": "https://assets.revolut.com/published-assets-v3/94150ea7-4f5d-4931-9947-ab0518bea769/07844b11-869f-4b91-a5e5-ae2605f6c1c8.png",
-                                                    "optimisationParams": {
-                                                        "width": 1080,
-                                                        "quality": 75,
-                                                        "codecName": "png"
-                                                    }
-                                                }]
-                                            },
-                                            "imageSmall": {
-                                                "value": "https://assets.revolut.com/published-assets-v3/6f6c1b03-e83c-4fb3-a931-e302695b5b51/3ca19f1a-aa73-48a4-9e20-22ba00ce9929.png",
-                                                "codecName": "png",
-                                                "optimisedResources": [{
-                                                    "value": "https://assets.revolut.com/published-assets-v3/01f199ee-b3f2-4203-9ab7-27d133045284/04d10641-878c-4fc6-926a-be2a59351265.webp",
-                                                    "optimisationParams": {
-                                                        "width": 750,
-                                                        "quality": 75,
-                                                        "codecName": "webp"
-                                                    }
-                                                }, {
-                                                    "value": "https://assets.revolut.com/published-assets-v3/01f199ee-b3f2-4203-9ab7-27d133045284/a1b80bd3-607e-450e-80a0-83317969cf66.png",
-                                                    "optimisationParams": {
-                                                        "width": 750,
-                                                        "quality": 75,
-                                                        "codecName": "png"
-                                                    }
-                                                }]
-                                            },
-                                            "video": {
-                                                "value": "https://assets.revolut.com/published-assets-v3/a07a910c-0df4-45f5-b0ca-7864377877a3/0da52da5-f59c-4863-a918-d8861c032000.mp4",
-                                                "options": []
-                                            },
-                                            "videoSmall": {
-                                                "value": "https://assets.revolut.com/published-assets-v3/a07a910c-0df4-45f5-b0ca-7864377877a3/0da52da5-f59c-4863-a918-d8861c032000.mp4",
-                                                "options": []
-                                            }
+                                            "image": {"value":"/stocks-etfs.png_8fca010d_2K.jpg","codecName":"jpeg","optimisedResources":[]},
+                                            "imageSmall": {"value":"/stocks-etfs.png_8fca010d_2K.jpg","codecName":"jpeg","optimisedResources":[]}
                                         }],
                                         "scrollAnimation": "parallax"
                                     }
